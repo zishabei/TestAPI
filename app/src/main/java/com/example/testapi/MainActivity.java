@@ -15,6 +15,7 @@ import android.app.WallpaperInfo;
 import android.app.WallpaperManager;
 import android.app.usage.StorageStatsManager;
 import android.bluetooth.BluetoothAdapter;
+import android.bluetooth.BluetoothClass;
 import android.bluetooth.BluetoothDevice;
 import android.content.BroadcastReceiver;
 import android.content.Context;
@@ -41,8 +42,13 @@ import android.webkit.WebView;
 import java.io.File;
 import java.io.IOException;
 import java.io.InputStream;
+import java.lang.reflect.Field;
+import java.lang.reflect.InvocationTargetException;
+import java.lang.reflect.Method;
 import java.util.ArrayList;
+import java.util.Date;
 import java.util.HashMap;
+import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 import java.util.Scanner;
@@ -114,10 +120,12 @@ public class MainActivity extends AppCompatActivity {
         getScreenInfo();
         //upTime wakeTime
         getTime();
-        // TODO: 2020/09/15 再確認
+        //wallPagerID
         getWallPagerID();
         //batteryPresent batteryStatus batteryVoltage batteryTechnology batteryScale batteryHealth batteryTemperature
         getBatteryInfo();
+        //userAgent
+        getUserAgent();
         //wifiFrequency
         getWifiFrequency();
         //applicationName
@@ -271,6 +279,8 @@ public class MainActivity extends AppCompatActivity {
         long wakeTime = SystemClock.uptimeMillis();
         Log.i(TAG, "wakeTime:" + wakeTime);
         mAdapter.addItem("wakeTime:\n" + wakeTime);
+        Log.i(TAG, "lastRestartedDateStr:" + new Date(System.currentTimeMillis() - upTime));
+        mAdapter.addItem("lastRestartedDateStr:" + new Date(System.currentTimeMillis() - upTime));
     }
 
     private void getBatteryInfo() {
@@ -357,9 +367,9 @@ public class MainActivity extends AppCompatActivity {
         }
     }
 
-    public Map<String, String> readFile(String fileName) {
+    public Map<String, String> readFile() {
         try {
-            String[] DATA = {"cat", "/proc/" + fileName};
+            String[] DATA = {"cat", "/proc/loadavg"};
             ProcessBuilder processBuilder = new ProcessBuilder(DATA);
             Process process = processBuilder.start();
             InputStream inputStream = process.getInputStream();
@@ -396,6 +406,11 @@ public class MainActivity extends AppCompatActivity {
     private void getPairedDevicesList() {
         BluetoothAdapter bluetoothAdapter = BluetoothAdapter.getDefaultAdapter();
         Set<BluetoothDevice> pairedDeviceSet = bluetoothAdapter.getBondedDevices();
+        Iterator<BluetoothDevice> it = pairedDeviceSet.iterator();
+        while (it.hasNext()) {
+            BluetoothDevice device = it.next();
+            Log.i(TAG, "getPairedDevicesList: " + device.toString());
+        }
         Log.i(TAG, "pairedDevicesList:" + pairedDeviceSet);
     }
 }
