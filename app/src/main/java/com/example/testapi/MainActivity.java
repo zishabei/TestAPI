@@ -38,11 +38,14 @@ import android.util.Log;
 import android.view.View;
 import android.webkit.WebView;
 
+import java.io.File;
 import java.io.IOException;
 import java.io.InputStream;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Scanner;
 import java.util.Set;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
@@ -63,7 +66,7 @@ public class MainActivity extends AppCompatActivity {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_main);
         initView();
-  
+
         String[] requestPermission = new String[]{Manifest.permission.ACCESS_FINE_LOCATION, Manifest.permission.ACCESS_COARSE_LOCATION};
 
         ActivityCompat.requestPermissions(this,
@@ -138,7 +141,12 @@ public class MainActivity extends AppCompatActivity {
                                     String id = adInfo.getId();
                                     Log.i(TAG, "adid:" + id);
                                     boolean adTrackingEnable = adInfo.isLimitAdTrackingEnabled();
-                                    Log.i(TAG, "adTrackingEnable:" + adTrackingEnable);
+                                    if (adTrackingEnable) {
+                                        Log.i(TAG, "adTrackingEnable:" + 1);
+                                    } else {
+                                        Log.i(TAG, "adTrackingEnable:" + 0);
+                                    }
+
                                     runOnUiThread(new Runnable() {
                                         @Override
                                         public void run() {
@@ -175,17 +183,41 @@ public class MainActivity extends AppCompatActivity {
 
     private void getNfcEnable() {
         NfcAdapter nfcEnable = NfcAdapter.getDefaultAdapter(this);
-        Log.i(TAG, "nfcEnable:" + nfcEnable.isEnabled());
-        mAdapter.addItem("nfcEnable:\n" + nfcEnable.isEnabled());
+        if (nfcEnable != null && nfcEnable.isEnabled()) {
+            Log.i(TAG, "nfcEnable:" + 1);
+            mAdapter.addItem("nfcEnable:\n" + 1);
+        } else {
+            Log.i(TAG, "nfcEnable:" + 0);
+            mAdapter.addItem("nfcEnable:\n" + 0);
+        }
+
     }
 
     @RequiresApi(api = Build.VERSION_CODES.O)
     private void getSize() {
+        Map<String, String> map = new HashMap<String, String>();
+        try {
+            Scanner s = new Scanner(new File("/proc/meminfo"));
+            while (s.hasNextLine()) {
+                String[] vals = s.nextLine().split(": ");
+                if (vals.length > 1) map.put(vals[0].trim(), vals[1].trim());
+            }
+        } catch (Exception e) {
+        }
+        long swapTotal = 0;
+        if (map.size() > 0 && map.containsKey("SwapTotal")) {
+            String total = map.get("SwapTotal");
+            if (total != null) {
+                String substring = total.substring(0, total.indexOf(" "));
+                swapTotal = Long.parseLong(substring) * 1024;
+            }
+        }
         ActivityManager am = (ActivityManager) getSystemService(Context.ACTIVITY_SERVICE);
         ActivityManager.MemoryInfo mi = new ActivityManager.MemoryInfo();
         am.getMemoryInfo(mi);
 
-        // TODO: 2020/09/15 memoryRamSize 再確認必要あり
+        Log.i(TAG, "memoryRamSize:" + (mi.totalMem + swapTotal));
+        mAdapter.addItem("memoryRamSize:\n" + (mi.totalMem + swapTotal));
         Log.i(TAG, "memoryTotalSize:" + mi.totalMem);
         mAdapter.addItem("memoryTotalSize:\n" + mi.totalMem);
         Log.i(TAG, "availableRamSize:" + mi.availMem);
@@ -207,6 +239,8 @@ public class MainActivity extends AppCompatActivity {
             mAdapter.addItem("freeExternalStorage:\n" + freeExternalStorage);
         } catch (IOException e) {
         }
+
+
     }
 
     private void getCpuCoresNumber() {
@@ -267,6 +301,12 @@ public class MainActivity extends AppCompatActivity {
                 Log.i(TAG, "batteryVoltage:" + batteryVoltage);
                 mAdapter.addItem("batteryVoltage:\n" + batteryVoltage);
 
+                BatteryManager batteryManager = (BatteryManager) getSystemService(BATTERY_SERVICE);
+                int batteryNowCurrent = batteryManager.getIntProperty(BatteryManager.BATTERY_PROPERTY_CURRENT_NOW);
+                int batteryAvgCurrent = batteryManager.getIntProperty(BatteryManager.BATTERY_PROPERTY_CURRENT_AVERAGE);
+                Log.i(TAG, "batteryNowCurrent:" + batteryNowCurrent);
+                Log.i(TAG, "batteryAvgCurrent:" + batteryAvgCurrent);
+
                 String batteryTechnology = intent.getStringExtra(BatteryManager.EXTRA_TECHNOLOGY);
                 Log.i(TAG, "batteryTechnology:" + batteryTechnology);
                 mAdapter.addItem("batteryTechnology:\n" + batteryTechnology);
@@ -317,9 +357,9 @@ public class MainActivity extends AppCompatActivity {
         }
     }
 
-    public Map<String, String> getCPUInfo() {
+    public Map<String, String> readFile(String fileName) {
         try {
-            String[] DATA = {"cat", "/proc/cpuinfo"};
+            String[] DATA = {"cat", "/proc/" + fileName};
             ProcessBuilder processBuilder = new ProcessBuilder(DATA);
             Process process = processBuilder.start();
             InputStream inputStream = process.getInputStream();
