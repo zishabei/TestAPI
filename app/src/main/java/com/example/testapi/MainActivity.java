@@ -2,6 +2,7 @@ package com.example.testapi;
 
 import androidx.ads.identifier.AdvertisingIdClient;
 import androidx.ads.identifier.AdvertisingIdInfo;
+import androidx.annotation.NonNull;
 import androidx.annotation.RequiresApi;
 import androidx.appcompat.app.AppCompatActivity;
 import androidx.core.app.ActivityCompat;
@@ -22,9 +23,12 @@ import android.content.Context;
 import android.content.Intent;
 import android.content.IntentFilter;
 import android.content.pm.PackageManager;
+import android.net.ConnectivityManager;
+import android.net.NetworkInfo;
 import android.net.wifi.WifiInfo;
 import android.net.wifi.WifiManager;
 import android.nfc.NfcAdapter;
+import android.os.AsyncTask;
 import android.os.BatteryManager;
 import android.os.Build;
 import android.os.Bundle;
@@ -33,7 +37,14 @@ import android.os.StatFs;
 import android.os.SystemClock;
 import android.os.storage.StorageManager;
 import android.provider.Settings;
+import android.telephony.CellIdentityNr;
 import android.telephony.CellInfo;
+import android.telephony.CellInfoCdma;
+import android.telephony.CellInfoGsm;
+import android.telephony.CellInfoLte;
+import android.telephony.CellInfoNr;
+import android.telephony.CellInfoWcdma;
+import android.telephony.CellSignalStrengthNr;
 import android.telephony.TelephonyManager;
 import android.util.Log;
 import android.view.View;
@@ -65,6 +76,8 @@ public class MainActivity extends AppCompatActivity {
     private static final String TAG = "GetNewAPI";
     private ShowItemAdapter mAdapter;
     private MyBatteryBroadcastReciver myBatteryBroadcastReciver;
+    TelephonyManager mTelephonyManager;
+
 
     @RequiresApi(api = Build.VERSION_CODES.P)
     @Override
@@ -132,7 +145,53 @@ public class MainActivity extends AppCompatActivity {
         getApplicationName();
         //cellConnectionStatus
         getCellConnectionStatus();
+        //getPairedDevicesList();
+        // TODO: 2020/09/16
+//        test();
     }
+
+    private void test() {
+        try {
+            WifiManager manager = (WifiManager) getApplicationContext().getSystemService(Context.WIFI_SERVICE);
+            Method method = manager.getClass().getDeclaredMethod("getWifiApState");
+            int state = (int) method.invoke(manager);
+            Field field = manager.getClass().getDeclaredField("WIFI_AP_STATE_ENABLED");
+            int value = (int) field.get(manager);
+            if (state == value) {
+                Log.i(TAG, "test: kaiqi");
+            } else {
+                Log.i(TAG, "test: guanbi");
+            }
+        } catch (NoSuchMethodException e) {
+            e.printStackTrace();
+        } catch (IllegalAccessException e) {
+            e.printStackTrace();
+        } catch (InvocationTargetException e) {
+            e.printStackTrace();
+        } catch (NoSuchFieldException e) {
+            e.printStackTrace();
+        }
+
+        IntentFilter mIntentFilter = new IntentFilter("android.net.wifi.WIFI_AP_STATE_CHANGED");
+        registerReceiver(mReceiver, mIntentFilter);
+    }
+
+    private final BroadcastReceiver mReceiver = new BroadcastReceiver() {
+        @Override
+        public void onReceive(Context context, Intent intent) {
+            String action = intent.getAction();
+            if ("android.net.wifi.WIFI_AP_STATE_CHANGED".equals(action)) {
+
+                // get Wi-Fi Hotspot state here
+                int state = intent.getIntExtra(WifiManager.EXTRA_WIFI_STATE, 0);
+
+                if (WifiManager.WIFI_STATE_ENABLED == state % 10) {
+                    // Wifi is enabled
+                }
+
+            }
+        }
+    };
 
     private void getAdid() {
         ExecutorService executorService = Executors.newSingleThreadExecutor();
@@ -241,9 +300,9 @@ public class MainActivity extends AppCompatActivity {
         try {
             long totalExternalStorage = storageStatsManager.getTotalBytes(StorageManager.UUID_DEFAULT);
             long freeExternalStorage = storageStatsManager.getFreeBytes(StorageManager.UUID_DEFAULT);
-            Log.d(TAG, "totalExternalStorage:" + totalExternalStorage);
+            Log.i(TAG, "totalExternalStorage:" + totalExternalStorage);
             mAdapter.addItem("totalExternalStorage:\n" + totalExternalStorage);
-            Log.d(TAG, "freeExternalStorage:" + freeExternalStorage);
+            Log.i(TAG, "freeExternalStorage:" + freeExternalStorage);
             mAdapter.addItem("freeExternalStorage:\n" + freeExternalStorage);
         } catch (IOException e) {
         }
@@ -283,6 +342,19 @@ public class MainActivity extends AppCompatActivity {
         mAdapter.addItem("lastRestartedDateStr:" + new Date(System.currentTimeMillis() - upTime));
     }
 
+    @RequiresApi(api = Build.VERSION_CODES.N)
+    private void getWallPagerID() {
+        WallpaperManager instance = WallpaperManager.getInstance(this);
+        WallpaperInfo wallpaperInfo = instance.getWallpaperInfo();
+        if (wallpaperInfo == null) {
+            Log.i(TAG, "wallPagerID:" + 0);
+            mAdapter.addItem("wallPagerID:\n" + 0);
+        } else {
+            Log.i(TAG, "wallPagerID:" + 1);
+            mAdapter.addItem("wallPagerID:\n" + 1);
+        }
+    }
+
     private void getBatteryInfo() {
         IntentFilter filter = new IntentFilter(Intent.ACTION_BATTERY_CHANGED);
         myBatteryBroadcastReciver = new MyBatteryBroadcastReciver();
@@ -315,7 +387,9 @@ public class MainActivity extends AppCompatActivity {
                 int batteryNowCurrent = batteryManager.getIntProperty(BatteryManager.BATTERY_PROPERTY_CURRENT_NOW);
                 int batteryAvgCurrent = batteryManager.getIntProperty(BatteryManager.BATTERY_PROPERTY_CURRENT_AVERAGE);
                 Log.i(TAG, "batteryNowCurrent:" + batteryNowCurrent);
+                mAdapter.addItem("batteryNowCurrent:\n" + batteryNowCurrent);
                 Log.i(TAG, "batteryAvgCurrent:" + batteryAvgCurrent);
+                mAdapter.addItem("batteryAvgCurrent:\n" + batteryAvgCurrent);
 
                 String batteryTechnology = intent.getStringExtra(BatteryManager.EXTRA_TECHNOLOGY);
                 Log.i(TAG, "batteryTechnology:" + batteryTechnology);
@@ -331,6 +405,13 @@ public class MainActivity extends AppCompatActivity {
                 mAdapter.addItem("batteryTemperature:\n" + batteryTemperature);
             }
         }
+    }
+
+    private void getUserAgent() {
+        WebView mWebView = new WebView(this);
+        String userAgent = mWebView.getSettings().getUserAgentString();
+        Log.i(TAG, "userAgent:" + userAgent);
+        mAdapter.addItem("userAgent:\n" + userAgent);
     }
 
     @RequiresApi(api = Build.VERSION_CODES.LOLLIPOP)
@@ -355,15 +436,59 @@ public class MainActivity extends AppCompatActivity {
         mAdapter.addItem("applicationName:\n" + applicationName);
     }
 
-    @RequiresApi(api = Build.VERSION_CODES.P)
+    @RequiresApi(api = Build.VERSION_CODES.JELLY_BEAN_MR1)
     private void getCellConnectionStatus() {
-        TelephonyManager telephonyManager = (TelephonyManager) getSystemService(Context.TELEPHONY_SERVICE);
-        if (ActivityCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION) != PackageManager.PERMISSION_GRANTED) {
-            return;
+        new Thread(new Runnable() {
+            @RequiresApi(api = Build.VERSION_CODES.P)
+            @Override
+            public void run() {
+                mTelephonyManager = (TelephonyManager) getApplicationContext().getSystemService(Context.TELEPHONY_SERVICE);
+                List<CellInfo> allCellInfo;
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                    CellInfoResultsCallback cellInfoResultsCallback = new CellInfoResultsCallback();
+                    if (ActivityCompat.checkSelfPermission(MainActivity.this, Manifest.permission.ACCESS_FINE_LOCATION) != PackageManager.PERMISSION_GRANTED) {
+                        return;
+                    }
+                    mTelephonyManager.requestCellInfoUpdate(AsyncTask.THREAD_POOL_EXECUTOR, cellInfoResultsCallback);
+                    try {
+                        cellInfoResultsCallback.wait(5000);
+                    } catch (InterruptedException e) {
+                        e.printStackTrace();
+                    }
+                    allCellInfo = cellInfoResultsCallback.cellInfo;
+                } else {
+                    allCellInfo = mTelephonyManager.getAllCellInfo();
+                }
+                mTelephonyManager.getCellLocation();
+                for (CellInfo cellInfo : allCellInfo) {
+                    if (cellInfo.isRegistered()) {
+                        Log.i(TAG, "cellConnectionStatus:" + cellInfo.getCellConnectionStatus());
+                        runOnUiThread(new Runnable() {
+                            @Override
+                            public void run() {
+                                mAdapter.addItem("cellConnectionStatus:" + cellInfo.getCellConnectionStatus());
+                            }
+                        });
+                    }
+                }
+            }
+        }).start();
+    }
+
+    @RequiresApi(api = Build.VERSION_CODES.Q)
+    private static class CellInfoResultsCallback extends TelephonyManager.CellInfoCallback {
+        List<CellInfo> cellInfo;
+
+        @Override
+        public synchronized void onCellInfo(List<CellInfo> cellInfo) {
+            this.cellInfo = cellInfo;
+            notifyAll();
         }
-        List<CellInfo> allCellInfo = telephonyManager.getAllCellInfo();
-        for (CellInfo info : allCellInfo) {
-            Log.i(TAG, "cellConnectionStatus:" + info.getCellConnectionStatus());
+
+        synchronized void wait(int millis) throws InterruptedException {
+            if (cellInfo == null) {
+                super.wait(millis);
+            }
         }
     }
 
@@ -384,23 +509,6 @@ public class MainActivity extends AppCompatActivity {
             ex.printStackTrace();
         }
         return null;
-    }
-
-    private void getUserAgent() {
-        WebView mWebView = new WebView(this);
-        String userAgent = mWebView.getSettings().getUserAgentString();
-        Log.i(TAG, "userAgent:" + userAgent);
-    }
-
-    @RequiresApi(api = Build.VERSION_CODES.N)
-    private void getWallPagerID() {
-        WallpaperManager instance = WallpaperManager.getInstance(this);
-        WallpaperInfo wallpaperInfo = instance.getWallpaperInfo();
-        if (wallpaperInfo == null) {
-            Log.i(TAG, "wallPagerID:" + 0);
-        } else {
-            Log.i(TAG, "wallPagerID:" + 1);
-        }
     }
 
     private void getPairedDevicesList() {
