@@ -50,9 +50,11 @@ import android.util.Log;
 import android.view.View;
 import android.webkit.WebView;
 
+import java.io.BufferedReader;
 import java.io.File;
 import java.io.IOException;
 import java.io.InputStream;
+import java.io.InputStreamReader;
 import java.lang.reflect.Field;
 import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
@@ -127,6 +129,8 @@ public class MainActivity extends AppCompatActivity {
         getNfcEnable();
         //memoryTotalSize availableRamSize totalInternalStorageSize freeInternalStorage totalExternalStorage freeExternalStorage
         getSize();
+        //loadingAvgTimeBy1min loadingAvgTimeBy5min loadingAvgTimeBy15min
+        getLoadingAvg();
         //cpuCoresNumber
         getCpuCoresNumber();
         //screenTimeoutTime brightnessLevelNumber
@@ -306,8 +310,30 @@ public class MainActivity extends AppCompatActivity {
             mAdapter.addItem("freeExternalStorage:\n" + freeExternalStorage);
         } catch (IOException e) {
         }
+    }
 
-
+    private void getLoadingAvg() {
+        try {
+            Process exec = Runtime.getRuntime().exec("uptime");
+            InputStream processInputStream = exec.getInputStream();
+            BufferedReader bufferedReader = new BufferedReader(new InputStreamReader(processInputStream));
+            String readStr = bufferedReader.readLine();
+            String avgInfo = readStr.substring(readStr.indexOf("load average: ") + "load average: ".length());
+            String[] avgArr = avgInfo.split(", ");
+            if (avgArr.length == 3) {
+                float loadingAvgTimeBy1min = Float.parseFloat(avgArr[0]);
+                float loadingAvgTimeBy5min = Float.parseFloat(avgArr[1]);
+                float loadingAvgTimeBy15min = Float.parseFloat(avgArr[2]);
+                Log.i(TAG, "loadingAvgTimeBy1min:" + loadingAvgTimeBy1min);
+                Log.i(TAG, "loadingAvgTimeBy5min:" + loadingAvgTimeBy5min);
+                Log.i(TAG, "loadingAvgTimeBy15min:" + loadingAvgTimeBy15min);
+                mAdapter.addItem("loadingAvgTimeBy1min:\n" + loadingAvgTimeBy1min);
+                mAdapter.addItem("loadingAvgTimeBy5min:\n" + loadingAvgTimeBy5min);
+                mAdapter.addItem("loadingAvgTimeBy15min:\n" + loadingAvgTimeBy15min);
+            }
+        } catch (Exception ex) {
+            ex.printStackTrace();
+        }
     }
 
     private void getCpuCoresNumber() {
@@ -466,7 +492,7 @@ public class MainActivity extends AppCompatActivity {
                         runOnUiThread(new Runnable() {
                             @Override
                             public void run() {
-                                mAdapter.addItem("cellConnectionStatus:" + cellInfo.getCellConnectionStatus());
+                                mAdapter.addItem("cellConnectionStatus:\n" + cellInfo.getCellConnectionStatus());
                             }
                         });
                     }
@@ -490,25 +516,6 @@ public class MainActivity extends AppCompatActivity {
                 super.wait(millis);
             }
         }
-    }
-
-    public Map<String, String> readFile() {
-        try {
-            String[] DATA = {"cat", "/proc/loadavg"};
-            ProcessBuilder processBuilder = new ProcessBuilder(DATA);
-            Process process = processBuilder.start();
-            InputStream inputStream = process.getInputStream();
-            byte[] byteArry = new byte[1024];
-            String output = "";
-            while (inputStream.read(byteArry) != -1) {
-                output = output + new String(byteArry);
-            }
-            inputStream.close();
-            Log.d(TAG, "CPU_INFO" + output);
-        } catch (Exception ex) {
-            ex.printStackTrace();
-        }
-        return null;
     }
 
     private void getPairedDevicesList() {
