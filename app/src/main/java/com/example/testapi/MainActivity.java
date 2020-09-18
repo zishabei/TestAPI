@@ -2,6 +2,7 @@ package com.example.testapi;
 
 import androidx.ads.identifier.AdvertisingIdClient;
 import androidx.ads.identifier.AdvertisingIdInfo;
+import androidx.annotation.NonNull;
 import androidx.annotation.RequiresApi;
 import androidx.appcompat.app.AppCompatActivity;
 import androidx.core.app.ActivityCompat;
@@ -33,12 +34,10 @@ import android.os.ParcelUuid;
 import android.os.StatFs;
 import android.os.SystemClock;
 import android.os.storage.StorageManager;
-import android.os.storage.StorageVolume;
 import android.provider.Settings;
 import android.telephony.CellInfo;
 import android.telephony.TelephonyManager;
 import android.util.Log;
-import android.view.View;
 import android.webkit.WebView;
 
 import java.io.BufferedReader;
@@ -46,8 +45,6 @@ import java.io.File;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.InputStreamReader;
-import java.lang.reflect.Field;
-import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
 import java.util.ArrayList;
 import java.util.Date;
@@ -90,18 +87,8 @@ public class MainActivity extends AppCompatActivity {
         LinearLayoutManager layoutManager = new LinearLayoutManager(this);
         mRecyclerView.setLayoutManager(layoutManager);
         mRecyclerView.setAdapter(mAdapter);
-        findViewById(R.id.startBtn).setOnClickListener(new View.OnClickListener() {
-            @Override
-            public void onClick(View v) {
-                start();
-            }
-        });
-        findViewById(R.id.cleanBtn).setOnClickListener(new View.OnClickListener() {
-            @Override
-            public void onClick(View v) {
-                mAdapter.setNotifyData(new ArrayList<>());
-            }
-        });
+        findViewById(R.id.startBtn).setOnClickListener(v -> start());
+        findViewById(R.id.cleanBtn).setOnClickListener(v -> mAdapter.setNotifyData(new ArrayList<>()));
     }
 
     private void start() {
@@ -152,37 +139,31 @@ public class MainActivity extends AppCompatActivity {
      */
     private void getAdid() {
         ExecutorService executorService = Executors.newSingleThreadExecutor();
-        executorService.execute(new Runnable() {
-            @Override
-            public void run() {
-                if (AdvertisingIdClient.isAdvertisingIdProviderAvailable(getApplicationContext())) {
-                    ListenableFuture<AdvertisingIdInfo> advertisingIdInfoListenableFuture =
-                            AdvertisingIdClient.getAdvertisingIdInfo(getApplicationContext());
-                    Futures.addCallback(advertisingIdInfoListenableFuture,
-                            new FutureCallback<AdvertisingIdInfo>() {
-                                @Override
-                                public void onSuccess(AdvertisingIdInfo adInfo) {
-                                    String id = adInfo.getId();
-                                    boolean adTrackingEnable = adInfo.isLimitAdTrackingEnabled();
-                                    runOnUiThread(new Runnable() {
-                                        @Override
-                                        public void run() {
-                                            log("adid :", id);
-                                            if (adTrackingEnable) {
-                                                log("adTrackingEnable :", 1);
-                                            } else {
-                                                log("adTrackingEnable :", 0);
-                                            }
-                                        }
-                                    });
-                                }
+        executorService.execute(() -> {
+            if (AdvertisingIdClient.isAdvertisingIdProviderAvailable(getApplicationContext())) {
+                ListenableFuture<AdvertisingIdInfo> advertisingIdInfoListenableFuture =
+                        AdvertisingIdClient.getAdvertisingIdInfo(getApplicationContext());
+                Futures.addCallback(advertisingIdInfoListenableFuture,
+                        new FutureCallback<AdvertisingIdInfo>() {
+                            @Override
+                            public void onSuccess(AdvertisingIdInfo adInfo) {
+                                String id = adInfo.getId();
+                                boolean adTrackingEnable = adInfo.isLimitAdTrackingEnabled();
+                                runOnUiThread(() -> {
+                                    log("adid :", id);
+                                    if (adTrackingEnable) {
+                                        log("adTrackingEnable :", 1);
+                                    } else {
+                                        log("adTrackingEnable :", 0);
+                                    }
+                                });
+                            }
 
-                                @Override
-                                public void onFailure(Throwable throwable) {
-                                    Log.e(TAG, "throwable:" + throwable.getMessage());
-                                }
-                            }, executorService);
-                }
+                            @Override
+                            public void onFailure(@NonNull Throwable throwable) {
+                                Log.e(TAG, "throwable:" + throwable.getMessage());
+                            }
+                        }, executorService);
             }
         });
     }
@@ -208,7 +189,7 @@ public class MainActivity extends AppCompatActivity {
     }
 
     private void getSize() {
-        Map<String, String> map = new HashMap<String, String>();
+        Map<String, String> map = new HashMap<>();
         try {
             Scanner s = new Scanner(new File("/proc/meminfo"));
             while (s.hasNextLine()) {
@@ -324,7 +305,6 @@ public class MainActivity extends AppCompatActivity {
                     object.put("type", device.getType());
                     object.put("address", device.getAddress());
                     object.put("bondState", device.getBondState());
-                    String s = device.getBluetoothClass().toString();
                     ParcelUuid[] uuids = device.getUuids();
                     JSONArray arrayUuids = new JSONArray();
                     for (ParcelUuid uuid : uuids) {
@@ -439,40 +419,34 @@ public class MainActivity extends AppCompatActivity {
     }
 
     private void getCellConnectionStatus() {
-        new Thread(new Runnable() {
-            @Override
-            public void run() {
-                mTelephonyManager = (TelephonyManager) getApplicationContext().getSystemService(Context.TELEPHONY_SERVICE);
-                List<CellInfo> allCellInfo;
-                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-                    CellInfoResultsCallback cellInfoResultsCallback = new CellInfoResultsCallback();
-                    if (ActivityCompat.checkSelfPermission(MainActivity.this, Manifest.permission.ACCESS_FINE_LOCATION) != PackageManager.PERMISSION_GRANTED) {
-                        return;
-                    }
-                    //request Manifest.permission.ACCESS_FINE_LOCATION
-                    mTelephonyManager.requestCellInfoUpdate(AsyncTask.THREAD_POOL_EXECUTOR, cellInfoResultsCallback);
-                    try {
-                        cellInfoResultsCallback.wait(5000);
-                    } catch (InterruptedException e) {
-                        e.printStackTrace();
-                    }
-                    allCellInfo = cellInfoResultsCallback.cellInfo;
-                } else {
-                    allCellInfo = mTelephonyManager.getAllCellInfo();
+        new Thread(() -> {
+            mTelephonyManager = (TelephonyManager) getApplicationContext().getSystemService(Context.TELEPHONY_SERVICE);
+            List<CellInfo> allCellInfo;
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                CellInfoResultsCallback cellInfoResultsCallback = new CellInfoResultsCallback();
+                if (ActivityCompat.checkSelfPermission(MainActivity.this, Manifest.permission.ACCESS_FINE_LOCATION) != PackageManager.PERMISSION_GRANTED) {
+                    return;
                 }
-                mTelephonyManager.getCellLocation();
-                for (CellInfo cellInfo : allCellInfo) {
-                    if (cellInfo.isRegistered()) {
-                        runOnUiThread(new Runnable() {
-                            @Override
-                            public void run() {
-                                // getCellConnectionStatus API level 28(P以降取得できる)
-                                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
-                                    log("cellConnectionStatus :", cellInfo.getCellConnectionStatus());
-                                }
-                            }
-                        });
-                    }
+                //request Manifest.permission.ACCESS_FINE_LOCATION
+                mTelephonyManager.requestCellInfoUpdate(AsyncTask.THREAD_POOL_EXECUTOR, cellInfoResultsCallback);
+                try {
+                    cellInfoResultsCallback.waitCell();
+                } catch (InterruptedException e) {
+                    e.printStackTrace();
+                }
+                allCellInfo = cellInfoResultsCallback.cellInfo;
+            } else {
+                allCellInfo = mTelephonyManager.getAllCellInfo();
+            }
+            mTelephonyManager.getCellLocation();
+            for (CellInfo cellInfo : allCellInfo) {
+                if (cellInfo.isRegistered()) {
+                    runOnUiThread(() -> {
+                        // getCellConnectionStatus API level 28(P以降取得できる)
+                        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+                            log("cellConnectionStatus :", cellInfo.getCellConnectionStatus());
+                        }
+                    });
                 }
             }
         }).start();
@@ -483,14 +457,14 @@ public class MainActivity extends AppCompatActivity {
         List<CellInfo> cellInfo;
 
         @Override
-        public synchronized void onCellInfo(List<CellInfo> cellInfo) {
+        public synchronized void onCellInfo(@NonNull List<CellInfo> cellInfo) {
             this.cellInfo = cellInfo;
             notifyAll();
         }
 
-        synchronized void wait(int millis) throws InterruptedException {
+        synchronized void waitCell() throws InterruptedException {
             if (cellInfo == null) {
-                super.wait(millis);
+                super.wait(5000);
             }
         }
     }
