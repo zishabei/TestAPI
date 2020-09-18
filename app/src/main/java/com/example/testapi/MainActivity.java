@@ -2,7 +2,6 @@ package com.example.testapi;
 
 import androidx.ads.identifier.AdvertisingIdClient;
 import androidx.ads.identifier.AdvertisingIdInfo;
-import androidx.annotation.NonNull;
 import androidx.annotation.RequiresApi;
 import androidx.appcompat.app.AppCompatActivity;
 import androidx.core.app.ActivityCompat;
@@ -16,15 +15,12 @@ import android.app.WallpaperInfo;
 import android.app.WallpaperManager;
 import android.app.usage.StorageStatsManager;
 import android.bluetooth.BluetoothAdapter;
-import android.bluetooth.BluetoothClass;
 import android.bluetooth.BluetoothDevice;
 import android.content.BroadcastReceiver;
 import android.content.Context;
 import android.content.Intent;
 import android.content.IntentFilter;
 import android.content.pm.PackageManager;
-import android.net.ConnectivityManager;
-import android.net.NetworkInfo;
 import android.net.wifi.WifiInfo;
 import android.net.wifi.WifiManager;
 import android.nfc.NfcAdapter;
@@ -33,18 +29,12 @@ import android.os.BatteryManager;
 import android.os.Build;
 import android.os.Bundle;
 import android.os.Environment;
+import android.os.ParcelUuid;
 import android.os.StatFs;
 import android.os.SystemClock;
 import android.os.storage.StorageManager;
 import android.provider.Settings;
-import android.telephony.CellIdentityNr;
 import android.telephony.CellInfo;
-import android.telephony.CellInfoCdma;
-import android.telephony.CellInfoGsm;
-import android.telephony.CellInfoLte;
-import android.telephony.CellInfoNr;
-import android.telephony.CellInfoWcdma;
-import android.telephony.CellSignalStrengthNr;
 import android.telephony.TelephonyManager;
 import android.util.Log;
 import android.view.View;
@@ -73,6 +63,9 @@ import com.google.common.util.concurrent.FutureCallback;
 import com.google.common.util.concurrent.Futures;
 import com.google.common.util.concurrent.ListenableFuture;
 
+import org.json.JSONArray;
+import org.json.JSONObject;
+
 public class MainActivity extends AppCompatActivity {
 
     private static final String TAG = "GetNewAPI";
@@ -80,19 +73,14 @@ public class MainActivity extends AppCompatActivity {
     private MyBatteryBroadcastReciver myBatteryBroadcastReciver;
     TelephonyManager mTelephonyManager;
 
-
-    @RequiresApi(api = Build.VERSION_CODES.P)
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_main);
         initView();
 
-        String[] requestPermission = new String[]{Manifest.permission.ACCESS_FINE_LOCATION, Manifest.permission.ACCESS_COARSE_LOCATION};
-
-        ActivityCompat.requestPermissions(this,
-                requestPermission,
-                123);
+        String[] requestPermission = new String[]{Manifest.permission.ACCESS_FINE_LOCATION};
+        ActivityCompat.requestPermissions(this, requestPermission, 1000);
     }
 
     private void initView() {
@@ -103,7 +91,6 @@ public class MainActivity extends AppCompatActivity {
         mRecyclerView.setLayoutManager(layoutManager);
         mRecyclerView.setAdapter(mAdapter);
         findViewById(R.id.startBtn).setOnClickListener(new View.OnClickListener() {
-            @RequiresApi(api = Build.VERSION_CODES.P)
             @Override
             public void onClick(View v) {
                 start();
@@ -117,12 +104,11 @@ public class MainActivity extends AppCompatActivity {
         });
     }
 
-    @RequiresApi(api = Build.VERSION_CODES.P)
     private void start() {
         //adid adTrackingEnable
         getAdid();
         //osType 固定値
-        Log.i(TAG, "osType:" + "Android");
+        log("osType :", "Android");
         //buildVersion manufacturerName modelCode brandName
         getBuildInfo();
         //nfcEnable
@@ -137,12 +123,16 @@ public class MainActivity extends AppCompatActivity {
         getScreenInfo();
         //upTime wakeTime
         getTime();
+        //pairedDevicesList
+        getPairedDevicesList();
         //wallPagerID
         getWallPagerID();
         //batteryPresent batteryStatus batteryVoltage batteryTechnology batteryScale batteryHealth batteryTemperature
         getBatteryInfo();
         //userAgent
         getUserAgent();
+        //wifiHotSpotEnable
+        getWifiHotSpotEnable();
         //wifiFrequency
         getWifiFrequency();
         //applicationName
@@ -197,6 +187,14 @@ public class MainActivity extends AppCompatActivity {
         }
     };
 
+    /**
+     * dependencies {
+     * //AdvertisingIdClient
+     * implementation 'androidx.ads:ads-identifier:1.0.0-alpha01'
+     * // Used for the calls to addCallback() in the snippets on this page.
+     * implementation 'com.google.guava:guava:28.0-android'
+     * }
+     */
     private void getAdid() {
         ExecutorService executorService = Executors.newSingleThreadExecutor();
         executorService.execute(new Runnable() {
@@ -210,19 +208,16 @@ public class MainActivity extends AppCompatActivity {
                                 @Override
                                 public void onSuccess(AdvertisingIdInfo adInfo) {
                                     String id = adInfo.getId();
-                                    Log.i(TAG, "adid:" + id);
                                     boolean adTrackingEnable = adInfo.isLimitAdTrackingEnabled();
-                                    if (adTrackingEnable) {
-                                        Log.i(TAG, "adTrackingEnable:" + 1);
-                                    } else {
-                                        Log.i(TAG, "adTrackingEnable:" + 0);
-                                    }
-
                                     runOnUiThread(new Runnable() {
                                         @Override
                                         public void run() {
-                                            mAdapter.addItem("adid:\n" + id);
-                                            mAdapter.addItem("adTrackingEnable:\n" + adTrackingEnable);
+                                            log("adid :", id);
+                                            if (adTrackingEnable) {
+                                                log("adTrackingEnable :", 1);
+                                            } else {
+                                                log("adTrackingEnable :", 0);
+                                            }
                                         }
                                     });
                                 }
@@ -239,32 +234,24 @@ public class MainActivity extends AppCompatActivity {
 
     private void getBuildInfo() {
         String buildVersion = Build.FINGERPRINT;
-        Log.i(TAG, "buildVersion:" + buildVersion);
-        mAdapter.addItem("buildVersion:\n" + buildVersion);
+        log("buildVersion :", buildVersion);
         String manufacturerName = Build.MANUFACTURER;
-        Log.i(TAG, "manufacturerName:" + manufacturerName);
-        mAdapter.addItem("manufacturerName:\n" + manufacturerName);
+        log("manufacturerName :", manufacturerName);
         String modelCode = Build.MODEL;
-        Log.i(TAG, "modelCode:" + modelCode);
-        mAdapter.addItem("modelCode:\n" + modelCode);
+        log("modelCode :", modelCode);
         String brandName = Build.BRAND;
-        Log.i(TAG, "brandName:" + brandName);
-        mAdapter.addItem("brandName:\n" + brandName);
+        log("brandName :", brandName);
     }
 
     private void getNfcEnable() {
         NfcAdapter nfcEnable = NfcAdapter.getDefaultAdapter(this);
         if (nfcEnable != null && nfcEnable.isEnabled()) {
-            Log.i(TAG, "nfcEnable:" + 1);
-            mAdapter.addItem("nfcEnable:\n" + 1);
+            log("nfcEnable :", 1);
         } else {
-            Log.i(TAG, "nfcEnable:" + 0);
-            mAdapter.addItem("nfcEnable:\n" + 0);
+            log("nfcEnable :", 0);
         }
-
     }
 
-    @RequiresApi(api = Build.VERSION_CODES.O)
     private void getSize() {
         Map<String, String> map = new HashMap<String, String>();
         try {
@@ -286,30 +273,29 @@ public class MainActivity extends AppCompatActivity {
         ActivityManager am = (ActivityManager) getSystemService(Context.ACTIVITY_SERVICE);
         ActivityManager.MemoryInfo mi = new ActivityManager.MemoryInfo();
         am.getMemoryInfo(mi);
-
-        Log.i(TAG, "memoryRamSize:" + (mi.totalMem + swapTotal));
-        mAdapter.addItem("memoryRamSize:\n" + (mi.totalMem + swapTotal));
-        Log.i(TAG, "memoryTotalSize:" + mi.totalMem);
-        mAdapter.addItem("memoryTotalSize:\n" + mi.totalMem);
-        Log.i(TAG, "availableRamSize:" + mi.availMem);
-        mAdapter.addItem("availableRamSize:\n" + mi.availMem);
+        log("memoryRamSize :", (mi.totalMem + swapTotal));
+        log("memoryTotalSize :", mi.totalMem);
+        log("availableRamSize :", mi.availMem);
 
         StatFs statFsInternal = new StatFs(Environment.getRootDirectory().getAbsolutePath());
-        Log.i(TAG, "totalInternalStorageSize:" + statFsInternal.getTotalBytes());
-        mAdapter.addItem("totalInternalStorageSize:\n" + statFsInternal.getTotalBytes());
-        Log.i(TAG, "freeInternalStorage:" + statFsInternal.getAvailableBytes());
-        mAdapter.addItem("freeInternalStorage:\n" + statFsInternal.getAvailableBytes());
+        log("totalInternalStorageSize :", statFsInternal.getTotalBytes());
+        log("freeInternalStorage :", statFsInternal.getAvailableBytes());
 
-        StorageStatsManager storageStatsManager = (StorageStatsManager) getApplicationContext().getSystemService(Context.STORAGE_STATS_SERVICE);
-        try {
-            long totalExternalStorage = storageStatsManager.getTotalBytes(StorageManager.UUID_DEFAULT);
-            long freeExternalStorage = storageStatsManager.getFreeBytes(StorageManager.UUID_DEFAULT);
-            Log.i(TAG, "totalExternalStorage:" + totalExternalStorage);
-            mAdapter.addItem("totalExternalStorage:\n" + totalExternalStorage);
-            Log.i(TAG, "freeExternalStorage:" + freeExternalStorage);
-            mAdapter.addItem("freeExternalStorage:\n" + freeExternalStorage);
-        } catch (IOException e) {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            //API level 26
+            StorageStatsManager storageStatsManager = (StorageStatsManager) getApplicationContext().getSystemService(Context.STORAGE_STATS_SERVICE);
+            try {
+                long totalExternalStorage = storageStatsManager.getTotalBytes(StorageManager.UUID_DEFAULT);
+                long freeExternalStorage = storageStatsManager.getFreeBytes(StorageManager.UUID_DEFAULT);
+                log("totalExternalStorage :", totalExternalStorage);
+                log("freeExternalStorage :", freeExternalStorage);
+            } catch (IOException e) {
+                e.printStackTrace();
+            }
+        } else {
+            // TODO: 2020/09/17 8以下
         }
+
     }
 
     private void getLoadingAvg() {
@@ -324,60 +310,86 @@ public class MainActivity extends AppCompatActivity {
                 float loadingAvgTimeBy1min = Float.parseFloat(avgArr[0]);
                 float loadingAvgTimeBy5min = Float.parseFloat(avgArr[1]);
                 float loadingAvgTimeBy15min = Float.parseFloat(avgArr[2]);
-                Log.i(TAG, "loadingAvgTimeBy1min:" + loadingAvgTimeBy1min);
-                Log.i(TAG, "loadingAvgTimeBy5min:" + loadingAvgTimeBy5min);
-                Log.i(TAG, "loadingAvgTimeBy15min:" + loadingAvgTimeBy15min);
-                mAdapter.addItem("loadingAvgTimeBy1min:\n" + loadingAvgTimeBy1min);
-                mAdapter.addItem("loadingAvgTimeBy5min:\n" + loadingAvgTimeBy5min);
-                mAdapter.addItem("loadingAvgTimeBy15min:\n" + loadingAvgTimeBy15min);
+                log("loadingAvgTimeBy1min :", loadingAvgTimeBy1min);
+                log("loadingAvgTimeBy5min :", loadingAvgTimeBy5min);
+                log("loadingAvgTimeBy15min :", loadingAvgTimeBy15min);
             }
-        } catch (Exception ex) {
-            ex.printStackTrace();
+        } catch (Exception e) {
+            e.printStackTrace();
         }
     }
 
     private void getCpuCoresNumber() {
         Runtime runtime = Runtime.getRuntime();
         int availableProcessors = runtime.availableProcessors();
-        Log.i(TAG, "cpuCoresNumber:" + availableProcessors);
-        mAdapter.addItem("cpuCoresNumber:\n" + availableProcessors);
+        log("cpuCoresNumber :", availableProcessors);
     }
 
     private void getScreenInfo() {
         try {
             long screenTimeoutTime = Settings.System.getLong(getContentResolver(),
                     Settings.System.SCREEN_OFF_TIMEOUT);
-            Log.i(TAG, "screenTimeoutTime:" + screenTimeoutTime);
-            mAdapter.addItem("screenTimeoutTime:\n" + screenTimeoutTime);
+            log("screenTimeoutTime :", screenTimeoutTime);
             int brightnessLevelNumber = Settings.System.getInt(getContentResolver(),
                     Settings.System.SCREEN_BRIGHTNESS);
-            Log.i(TAG, "brightnessLevelNumber:" + brightnessLevelNumber);
-            mAdapter.addItem("brightnessLevelNumber:\n" + brightnessLevelNumber);
+            log("brightnessLevelNumber :", brightnessLevelNumber);
         } catch (Settings.SettingNotFoundException e) {
+            e.printStackTrace();
         }
     }
 
     private void getTime() {
         long upTime = SystemClock.elapsedRealtime();
-        Log.i(TAG, "upTime:" + upTime);
-        mAdapter.addItem("upTime:\n" + upTime);
+        log("upTime :", upTime);
         long wakeTime = SystemClock.uptimeMillis();
-        Log.i(TAG, "wakeTime:" + wakeTime);
-        mAdapter.addItem("wakeTime:\n" + wakeTime);
-        Log.i(TAG, "lastRestartedDateStr:" + new Date(System.currentTimeMillis() - upTime));
-        mAdapter.addItem("lastRestartedDateStr:" + new Date(System.currentTimeMillis() - upTime));
+        log("wakeTime :", wakeTime);
+        log("lastRestartedDateStr :", new Date(System.currentTimeMillis() - upTime));
     }
 
-    @RequiresApi(api = Build.VERSION_CODES.N)
+    /**
+     * If Bluetooth state is not STATE_ON, this API will return an empty set.
+     * Requires Manifest.permission.BLUETOOTH
+     */
+    private void getPairedDevicesList() {
+        BluetoothAdapter bluetoothAdapter = BluetoothAdapter.getDefaultAdapter();
+        boolean enabled = bluetoothAdapter.isEnabled();
+        if (enabled) {
+            Set<BluetoothDevice> pairedDeviceSet = bluetoothAdapter.getBondedDevices();
+            JSONArray array = new JSONArray();
+            JSONObject obj = new JSONObject();
+            try {
+                for (BluetoothDevice device : pairedDeviceSet) {
+                    JSONObject object = new JSONObject();
+                    object.put("name", device.getName());
+                    object.put("type", device.getType());
+                    object.put("address", device.getAddress());
+                    object.put("bondState", device.getBondState());
+                    String s = device.getBluetoothClass().toString();
+                    ParcelUuid[] uuids = device.getUuids();
+                    JSONArray arrayUuids = new JSONArray();
+                    for (ParcelUuid uuid : uuids) {
+                        JSONObject objectUuid = new JSONObject();
+                        objectUuid.put("uuid", uuid.getUuid());
+                        arrayUuids.put(objectUuid);
+                    }
+                    object.put("uuids", arrayUuids);
+                    array.put(object);
+                }
+                obj.put("devicesList", array);
+                log("pairedDevicesList :", obj.toString());
+            } catch (Exception e) {
+                e.printStackTrace();
+            }
+        }
+    }
+
     private void getWallPagerID() {
         WallpaperManager instance = WallpaperManager.getInstance(this);
         WallpaperInfo wallpaperInfo = instance.getWallpaperInfo();
         if (wallpaperInfo == null) {
-            Log.i(TAG, "wallPagerID:" + 0);
-            mAdapter.addItem("wallPagerID:\n" + 0);
+            log("wallPagerID :", 0);
         } else {
-            Log.i(TAG, "wallPagerID:" + 1);
-            mAdapter.addItem("wallPagerID:\n" + 1);
+            log("wallPagerID :", 1);
         }
     }
 
@@ -389,46 +401,35 @@ public class MainActivity extends AppCompatActivity {
 
     private class MyBatteryBroadcastReciver extends BroadcastReceiver {
 
-        @RequiresApi(api = Build.VERSION_CODES.M)
         @Override
         public void onReceive(Context context, Intent intent) {
-            if (Intent.ACTION_BATTERY_CHANGED == intent.getAction()) {
+            if (Intent.ACTION_BATTERY_CHANGED.equals(intent.getAction())) {
                 unregisterReceiver(myBatteryBroadcastReciver);
                 boolean batteryPresent = intent.getBooleanExtra(BatteryManager.EXTRA_PRESENT, false);
                 if (batteryPresent) {
-                    Log.i(TAG, "batteryPresent:" + 1);
-                    mAdapter.addItem("batteryPresent:\n" + 1);
+                    log("batteryPresent :", 1);
                 } else {
-                    Log.i(TAG, "batteryPresent:" + 0);
-                    mAdapter.addItem("batteryPresent:\n" + 0);
+                    log("batteryPresent :", 0);
                 }
                 int batteryStatus = intent.getIntExtra(BatteryManager.EXTRA_STATUS, -1);
-                Log.i(TAG, "batteryStatus:" + batteryStatus);
-                mAdapter.addItem("batteryStatus:\n" + batteryStatus);
+                log("batteryStatus :", batteryStatus);
                 int batteryVoltage = intent.getIntExtra(BatteryManager.EXTRA_VOLTAGE, -1);
-                Log.i(TAG, "batteryVoltage:" + batteryVoltage);
-                mAdapter.addItem("batteryVoltage:\n" + batteryVoltage);
+                log("batteryVoltage :", batteryVoltage);
 
                 BatteryManager batteryManager = (BatteryManager) getSystemService(BATTERY_SERVICE);
                 int batteryNowCurrent = batteryManager.getIntProperty(BatteryManager.BATTERY_PROPERTY_CURRENT_NOW);
                 int batteryAvgCurrent = batteryManager.getIntProperty(BatteryManager.BATTERY_PROPERTY_CURRENT_AVERAGE);
-                Log.i(TAG, "batteryNowCurrent:" + batteryNowCurrent);
-                mAdapter.addItem("batteryNowCurrent:\n" + batteryNowCurrent);
-                Log.i(TAG, "batteryAvgCurrent:" + batteryAvgCurrent);
-                mAdapter.addItem("batteryAvgCurrent:\n" + batteryAvgCurrent);
+                log("batteryNowCurrent :", batteryNowCurrent);
+                log("batteryAvgCurrent :", batteryAvgCurrent);
 
                 String batteryTechnology = intent.getStringExtra(BatteryManager.EXTRA_TECHNOLOGY);
-                Log.i(TAG, "batteryTechnology:" + batteryTechnology);
-                mAdapter.addItem("batteryTechnology:\n" + batteryTechnology);
+                log("batteryTechnology :", batteryTechnology);
                 int batteryScale = intent.getIntExtra(BatteryManager.EXTRA_SCALE, -1);
-                Log.i(TAG, "batteryScale:" + batteryScale);
-                mAdapter.addItem("batteryScale:\n" + batteryScale);
+                log("batteryScale :", batteryScale);
                 int batteryHealth = intent.getIntExtra(BatteryManager.EXTRA_HEALTH, -1);
-                Log.i(TAG, "batteryHealth:" + batteryHealth);
-                mAdapter.addItem("batteryHealth:\n" + batteryHealth);
+                log("batteryHealth :", batteryHealth);
                 int batteryTemperature = intent.getIntExtra(BatteryManager.EXTRA_TEMPERATURE, -1);
-                Log.i(TAG, "batteryTemperature:" + batteryTemperature);
-                mAdapter.addItem("batteryTemperature:\n" + batteryTemperature);
+                log("batteryTemperature :", batteryTemperature);
             }
         }
     }
@@ -436,11 +437,28 @@ public class MainActivity extends AppCompatActivity {
     private void getUserAgent() {
         WebView mWebView = new WebView(this);
         String userAgent = mWebView.getSettings().getUserAgentString();
-        Log.i(TAG, "userAgent:" + userAgent);
-        mAdapter.addItem("userAgent:\n" + userAgent);
+        log("userAgent :", userAgent);
     }
 
-    @RequiresApi(api = Build.VERSION_CODES.LOLLIPOP)
+    private void getWifiHotSpotEnable() {
+        WifiManager wifimanager = (WifiManager) this.getApplicationContext().getSystemService(Context.WIFI_SERVICE);
+        try {
+            Method method = wifimanager.getClass().getDeclaredMethod("isWifiApEnabled");
+            method.setAccessible(true);
+            Boolean inUse = (Boolean) method.invoke(wifimanager);
+            if (inUse != null && inUse) {
+                log("wifiHotSpotEnable :", 1);
+            } else {
+                log("wifiHotSpotEnable :", 0);
+            }
+        } catch (Throwable e) {
+            e.printStackTrace();
+        }
+    }
+
+    /**
+     * Requires Manifest.permission.ACCESS_WIFI_STATE
+     */
     private void getWifiFrequency() {
         WifiManager wifiManager = (WifiManager) getApplicationContext().getSystemService(Context.WIFI_SERVICE);
         WifiInfo wifiInfo = wifiManager.getConnectionInfo();
@@ -452,20 +470,16 @@ public class MainActivity extends AppCompatActivity {
         if (freq > 4900 && freq < 5900) {
             wifiFrequency = (float) 5;
         }
-        Log.i(TAG, "wifiFrequency:" + wifiFrequency);
-        mAdapter.addItem("wifiFrequency:\n" + wifiFrequency);
+        log("wifiFrequency :", wifiFrequency);
     }
 
     private void getApplicationName() {
         String applicationName = getPackageName();
-        Log.i(TAG, "applicationName:" + applicationName);
-        mAdapter.addItem("applicationName:\n" + applicationName);
+        log("applicationName :", applicationName);
     }
 
-    @RequiresApi(api = Build.VERSION_CODES.JELLY_BEAN_MR1)
     private void getCellConnectionStatus() {
         new Thread(new Runnable() {
-            @RequiresApi(api = Build.VERSION_CODES.P)
             @Override
             public void run() {
                 mTelephonyManager = (TelephonyManager) getApplicationContext().getSystemService(Context.TELEPHONY_SERVICE);
@@ -475,6 +489,7 @@ public class MainActivity extends AppCompatActivity {
                     if (ActivityCompat.checkSelfPermission(MainActivity.this, Manifest.permission.ACCESS_FINE_LOCATION) != PackageManager.PERMISSION_GRANTED) {
                         return;
                     }
+                    //request Manifest.permission.ACCESS_FINE_LOCATION
                     mTelephonyManager.requestCellInfoUpdate(AsyncTask.THREAD_POOL_EXECUTOR, cellInfoResultsCallback);
                     try {
                         cellInfoResultsCallback.wait(5000);
@@ -488,11 +503,13 @@ public class MainActivity extends AppCompatActivity {
                 mTelephonyManager.getCellLocation();
                 for (CellInfo cellInfo : allCellInfo) {
                     if (cellInfo.isRegistered()) {
-                        Log.i(TAG, "cellConnectionStatus:" + cellInfo.getCellConnectionStatus());
                         runOnUiThread(new Runnable() {
                             @Override
                             public void run() {
-                                mAdapter.addItem("cellConnectionStatus:\n" + cellInfo.getCellConnectionStatus());
+                                // getCellConnectionStatus API level 28(P以降取得できる)
+                                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+                                    log("cellConnectionStatus :", cellInfo.getCellConnectionStatus());
+                                }
                             }
                         });
                     }
@@ -518,14 +535,8 @@ public class MainActivity extends AppCompatActivity {
         }
     }
 
-    private void getPairedDevicesList() {
-        BluetoothAdapter bluetoothAdapter = BluetoothAdapter.getDefaultAdapter();
-        Set<BluetoothDevice> pairedDeviceSet = bluetoothAdapter.getBondedDevices();
-        Iterator<BluetoothDevice> it = pairedDeviceSet.iterator();
-        while (it.hasNext()) {
-            BluetoothDevice device = it.next();
-            Log.i(TAG, "getPairedDevicesList: " + device.toString());
-        }
-        Log.i(TAG, "pairedDevicesList:" + pairedDeviceSet);
+    private void log(String key, Object value) {
+        Log.i(TAG, key + value);
+        mAdapter.addItem(key + "\n" + value);
     }
 }

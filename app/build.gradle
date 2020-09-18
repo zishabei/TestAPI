@@ -6,7 +6,7 @@ android {
 
     defaultConfig {
         applicationId "com.example.testapi"
-        minSdkVersion 16
+        minSdkVersion 21
         targetSdkVersion 29
         versionCode 1
         versionName "1.0"
@@ -34,5 +34,4 @@ dependencies {
     implementation 'androidx.ads:ads-identifier:1.0.0-alpha04'
     // Used for the calls to addCallback() in the snippets on this page.
     implementation 'com.google.guava:guava:29.0-jre'
-    implementation 'com.android.support:appcompat-v7:28.0.0'
 }
