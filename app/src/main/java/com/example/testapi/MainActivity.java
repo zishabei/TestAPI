@@ -33,6 +33,7 @@ import android.os.ParcelUuid;
 import android.os.StatFs;
 import android.os.SystemClock;
 import android.os.storage.StorageManager;
+import android.os.storage.StorageVolume;
 import android.provider.Settings;
 import android.telephony.CellInfo;
 import android.telephony.TelephonyManager;
@@ -51,7 +52,6 @@ import java.lang.reflect.Method;
 import java.util.ArrayList;
 import java.util.Date;
 import java.util.HashMap;
-import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 import java.util.Scanner;
@@ -139,55 +139,10 @@ public class MainActivity extends AppCompatActivity {
         getApplicationName();
         //cellConnectionStatus
         getCellConnectionStatus();
-        //getPairedDevicesList();
-        // TODO: 2020/09/16
-//        test();
     }
-
-    private void test() {
-        try {
-            WifiManager manager = (WifiManager) getApplicationContext().getSystemService(Context.WIFI_SERVICE);
-            Method method = manager.getClass().getDeclaredMethod("getWifiApState");
-            int state = (int) method.invoke(manager);
-            Field field = manager.getClass().getDeclaredField("WIFI_AP_STATE_ENABLED");
-            int value = (int) field.get(manager);
-            if (state == value) {
-                Log.i(TAG, "test: kaiqi");
-            } else {
-                Log.i(TAG, "test: guanbi");
-            }
-        } catch (NoSuchMethodException e) {
-            e.printStackTrace();
-        } catch (IllegalAccessException e) {
-            e.printStackTrace();
-        } catch (InvocationTargetException e) {
-            e.printStackTrace();
-        } catch (NoSuchFieldException e) {
-            e.printStackTrace();
-        }
-
-        IntentFilter mIntentFilter = new IntentFilter("android.net.wifi.WIFI_AP_STATE_CHANGED");
-        registerReceiver(mReceiver, mIntentFilter);
-    }
-
-    private final BroadcastReceiver mReceiver = new BroadcastReceiver() {
-        @Override
-        public void onReceive(Context context, Intent intent) {
-            String action = intent.getAction();
-            if ("android.net.wifi.WIFI_AP_STATE_CHANGED".equals(action)) {
-
-                // get Wi-Fi Hotspot state here
-                int state = intent.getIntExtra(WifiManager.EXTRA_WIFI_STATE, 0);
-
-                if (WifiManager.WIFI_STATE_ENABLED == state % 10) {
-                    // Wifi is enabled
-                }
-
-            }
-        }
-    };
 
     /**
+     * 必要なdependency
      * dependencies {
      * //AdvertisingIdClient
      * implementation 'androidx.ads:ads-identifier:1.0.0-alpha01'
@@ -261,6 +216,7 @@ public class MainActivity extends AppCompatActivity {
                 if (vals.length > 1) map.put(vals[0].trim(), vals[1].trim());
             }
         } catch (Exception e) {
+            e.printStackTrace();
         }
         long swapTotal = 0;
         if (map.size() > 0 && map.containsKey("SwapTotal")) {
@@ -293,9 +249,10 @@ public class MainActivity extends AppCompatActivity {
                 e.printStackTrace();
             }
         } else {
-            // TODO: 2020/09/17 8以下
+            StatFs statFsExternal = new StatFs(Environment.getExternalStorageDirectory().getAbsolutePath());
+            log("totalExternalStorage :", statFsExternal.getTotalBytes());
+            log("freeExternalStorage :", statFsExternal.getAvailableBytes());
         }
-
     }
 
     private void getLoadingAvg() {
@@ -352,6 +309,9 @@ public class MainActivity extends AppCompatActivity {
      */
     private void getPairedDevicesList() {
         BluetoothAdapter bluetoothAdapter = BluetoothAdapter.getDefaultAdapter();
+        if (bluetoothAdapter == null) {
+            return;
+        }
         boolean enabled = bluetoothAdapter.isEnabled();
         if (enabled) {
             Set<BluetoothDevice> pairedDeviceSet = bluetoothAdapter.getBondedDevices();
