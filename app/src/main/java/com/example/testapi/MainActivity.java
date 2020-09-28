@@ -6,6 +6,7 @@ import androidx.annotation.NonNull;
 import androidx.annotation.RequiresApi;
 import androidx.appcompat.app.AppCompatActivity;
 import androidx.core.app.ActivityCompat;
+import androidx.core.content.PermissionChecker;
 import androidx.recyclerview.widget.DividerItemDecoration;
 import androidx.recyclerview.widget.LinearLayoutManager;
 import androidx.recyclerview.widget.RecyclerView;
@@ -22,6 +23,9 @@ import android.content.Context;
 import android.content.Intent;
 import android.content.IntentFilter;
 import android.content.pm.PackageManager;
+import android.net.ConnectivityManager;
+import android.net.NetworkInfo;
+import android.net.TrafficStats;
 import android.net.wifi.WifiInfo;
 import android.net.wifi.WifiManager;
 import android.nfc.NfcAdapter;
@@ -36,6 +40,10 @@ import android.os.SystemClock;
 import android.os.storage.StorageManager;
 import android.provider.Settings;
 import android.telephony.CellInfo;
+import android.telephony.CellLocation;
+import android.telephony.PhoneStateListener;
+import android.telephony.ServiceState;
+import android.telephony.SignalStrength;
 import android.telephony.TelephonyManager;
 import android.util.Log;
 import android.webkit.WebView;
@@ -46,21 +54,25 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.io.InputStreamReader;
 import java.lang.reflect.Method;
+import java.text.SimpleDateFormat;
 import java.util.ArrayList;
 import java.util.Date;
 import java.util.HashMap;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Scanner;
 import java.util.Set;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
+import com.example.testapi.sp.NetworkLibPreference;
 import com.google.common.util.concurrent.FutureCallback;
 import com.google.common.util.concurrent.Futures;
 import com.google.common.util.concurrent.ListenableFuture;
 
 import org.json.JSONArray;
+import org.json.JSONException;
 import org.json.JSONObject;
 
 public class MainActivity extends AppCompatActivity {
@@ -68,7 +80,9 @@ public class MainActivity extends AppCompatActivity {
     private static final String TAG = "GetNewAPI";
     private ShowItemAdapter mAdapter;
     private MyBatteryBroadcastReciver myBatteryBroadcastReciver;
-    TelephonyManager mTelephonyManager;
+    private TelephonyManager mTelephonyManager;
+    private CustomPhoneStateListener mListener;
+    private Map<String, Long> mLogResult;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -78,6 +92,7 @@ public class MainActivity extends AppCompatActivity {
 
         String[] requestPermission = new String[]{Manifest.permission.ACCESS_FINE_LOCATION};
         ActivityCompat.requestPermissions(this, requestPermission, 1000);
+        start();
     }
 
     private void initView() {
@@ -87,8 +102,10 @@ public class MainActivity extends AppCompatActivity {
         LinearLayoutManager layoutManager = new LinearLayoutManager(this);
         mRecyclerView.setLayoutManager(layoutManager);
         mRecyclerView.setAdapter(mAdapter);
-        findViewById(R.id.startBtn).setOnClickListener(v -> start());
-        findViewById(R.id.cleanBtn).setOnClickListener(v -> mAdapter.setNotifyData(new ArrayList<>()));
+        findViewById(R.id.cleanBtn).setOnClickListener(v -> {
+            mAdapter.setNotifyData(new ArrayList<>());
+            start();
+        });
     }
 
     private void start() {
@@ -116,6 +133,8 @@ public class MainActivity extends AppCompatActivity {
         getWallPagerID();
         //batteryPresent batteryStatus batteryVoltage batteryTechnology batteryScale batteryHealth batteryTemperature
         getBatteryInfo();
+        //rssi
+        getRssi();
         //userAgent
         getUserAgent();
         //wifiHotSpotEnable
@@ -124,6 +143,10 @@ public class MainActivity extends AppCompatActivity {
         getWifiFrequency();
         //applicationName
         getApplicationName();
+        //storage
+        getStorage();
+        //
+        getTrafficData();
         //cellConnectionStatus
         getCellConnectionStatus();
     }
@@ -169,7 +192,7 @@ public class MainActivity extends AppCompatActivity {
     }
 
     private void getBuildInfo() {
-        String buildVersion = Build.FINGERPRINT;
+        String buildVersion = Build.DISPLAY;
         log("buildVersion :", buildVersion);
         String manufacturerName = Build.MANUFACTURER;
         log("manufacturerName :", manufacturerName);
@@ -189,30 +212,12 @@ public class MainActivity extends AppCompatActivity {
     }
 
     private void getSize() {
-        Map<String, String> map = new HashMap<>();
-        try {
-            Scanner s = new Scanner(new File("/proc/meminfo"));
-            while (s.hasNextLine()) {
-                String[] vals = s.nextLine().split(": ");
-                if (vals.length > 1) map.put(vals[0].trim(), vals[1].trim());
-            }
-        } catch (Exception e) {
-            e.printStackTrace();
-        }
-        long swapTotal = 0;
-        if (map.size() > 0 && map.containsKey("SwapTotal")) {
-            String total = map.get("SwapTotal");
-            if (total != null) {
-                String substring = total.substring(0, total.indexOf(" "));
-                swapTotal = Long.parseLong(substring) * 1024;
-            }
-        }
         ActivityManager am = (ActivityManager) getSystemService(Context.ACTIVITY_SERVICE);
         ActivityManager.MemoryInfo mi = new ActivityManager.MemoryInfo();
         am.getMemoryInfo(mi);
-        log("memoryRamSize :", (mi.totalMem + swapTotal));
         log("memoryTotalSize :", mi.totalMem);
         log("availableRamSize :", mi.availMem);
+        log("memoryRamSize :", (mi.totalMem - mi.availMem));
 
         StatFs statFsInternal = new StatFs(Environment.getRootDirectory().getAbsolutePath());
         log("totalInternalStorageSize :", statFsInternal.getTotalBytes());
@@ -281,7 +286,10 @@ public class MainActivity extends AppCompatActivity {
         log("upTime :", upTime);
         long wakeTime = SystemClock.uptimeMillis();
         log("wakeTime :", wakeTime);
-        log("lastRestartedDateStr :", new Date(System.currentTimeMillis() - upTime));
+        //TODO SDK startメソッドを呼び出し時間
+        SimpleDateFormat format = new SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ssXXX", Locale.JAPAN);
+        String str = format.format(new Date(System.currentTimeMillis() - upTime));
+        log("lastRestartedDateStr :", str);
     }
 
     /**
@@ -374,6 +382,21 @@ public class MainActivity extends AppCompatActivity {
         }
     }
 
+    /**
+     * Requires Manifest.permission.ACCESS_NETWORK_STATE
+     */
+    private void getRssi() {
+        int listenerEvents = PhoneStateListener.LISTEN_SIGNAL_STRENGTHS
+                | PhoneStateListener.LISTEN_SERVICE_STATE;
+        if (PermissionChecker.checkSelfPermission(this, Manifest.permission.ACCESS_COARSE_LOCATION) == PermissionChecker.PERMISSION_GRANTED ||
+                PermissionChecker.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION) == PermissionChecker.PERMISSION_GRANTED) {
+            listenerEvents |= PhoneStateListener.LISTEN_CELL_LOCATION;
+        }
+        mTelephonyManager = (TelephonyManager) getApplicationContext().getSystemService(Context.TELEPHONY_SERVICE);
+        mListener = new CustomPhoneStateListener();
+        mTelephonyManager.listen(mListener, listenerEvents);
+    }
+
     private void getUserAgent() {
         WebView mWebView = new WebView(this);
         String userAgent = mWebView.getSettings().getUserAgentString();
@@ -418,9 +441,119 @@ public class MainActivity extends AppCompatActivity {
         log("applicationName :", applicationName);
     }
 
+
+    private void getStorage() {
+
+        try {
+            String rootDirectory = Environment.getRootDirectory().getAbsolutePath();
+            StatFs root = new StatFs(rootDirectory);
+            JSONObject rootObj = new JSONObject();
+            rootObj.put("totalsize", root.getTotalBytes());
+            rootObj.put("freesize", root.getFreeBytes());
+            rootObj.put("path", rootDirectory);
+            String externalDirectory = Environment.getExternalStorageDirectory().getAbsolutePath();
+            StatFs external = new StatFs(externalDirectory);
+            JSONObject externalObj = new JSONObject();
+            externalObj.put("totalsize", external.getTotalBytes());
+            externalObj.put("freesize", external.getFreeBytes());
+            externalObj.put("path", externalDirectory);
+            log("storage :", String.format("\"%s%s\"", rootObj.toString(), externalObj.toString()));
+        } catch (JSONException e) {
+            e.printStackTrace();
+        }
+
+    }
+
+    private void getTrafficData() {
+        // traffic info
+        Long mobileDownBytes = null;
+        Long mobileUpBytes = null;
+        Long wifiDownBytes = null;
+        Long wifiUpBytes = null;
+        long[] trafficStats = getTrafficStats(this);
+        if (trafficStats != null && (trafficStats.length == 4)) {
+            mobileDownBytes = trafficStats[0];
+            mobileUpBytes = trafficStats[1];
+            wifiDownBytes = trafficStats[2];
+            wifiUpBytes = trafficStats[3];
+            Log.d(TAG, "mobileDownBytes:" + String.valueOf(trafficStats[0]));
+            Log.d(TAG, "mobileUpBytes:" + String.valueOf(trafficStats[1]));
+            Log.d(TAG, "wifiDownBytes:" + String.valueOf(trafficStats[2]));
+            Log.d(TAG, "wifiUpBytes:" + String.valueOf(trafficStats[3]));
+        }
+        log("mobileDownBytes :",mobileDownBytes);
+        log("mobileUpBytes :",mobileUpBytes);
+        log("wifiDownBytes :",wifiDownBytes);
+        log("wifiUpBytes :",wifiUpBytes);
+    }
+
+    private long[] getTrafficStats(Context ctx) {
+        long rxBytes = TrafficStats.getTotalRxBytes();
+        long txBytes = TrafficStats.getTotalTxBytes();
+        if ((rxBytes == -1L) || (txBytes == -1L)) {
+            return null;
+        }
+        long mobileUpload = TrafficStats.getMobileTxBytes();
+        long mobileDown = TrafficStats.getMobileRxBytes();
+        if ((mobileUpload == -1L) || (mobileDown == -1L)) {
+            return null;
+        }
+
+        long wifiUpload = txBytes - mobileUpload;
+        if (wifiUpload < 0) {
+            wifiUpload = 0L;
+        }
+        long wifiDown = rxBytes - mobileDown;
+        if (wifiDown < 0) {
+            wifiDown = 0L;
+        }
+
+        Log.d(TAG, "srcmobileUpload:" + String.valueOf(mobileUpload));
+        Log.d(TAG, "srcmobileDownload:" + String.valueOf(mobileDown));
+        Log.d(TAG, "srcwifiUpload:" + String.valueOf(wifiUpload));
+        Log.d(TAG, "srcwifiDownload:" + String.valueOf(wifiDown));
+
+        //Last time
+        long lastMobileUpload = NetworkLibPreference.getMobileTrafficUp(ctx);
+        long lastMobileDown = NetworkLibPreference.getMobileTrafficDown(ctx);
+        long lastWifiUpload = NetworkLibPreference.getWifiTrafficUp(ctx);
+        long lastWifiDown = NetworkLibPreference.getWifiTrafficDown(ctx);
+
+        Log.d(TAG, "lastmobileUpload:" + String.valueOf(lastMobileUpload));
+        Log.d(TAG, "lastmobileDownload:" + String.valueOf(lastMobileDown));
+        Log.d(TAG, "lastwifiUpload:" + String.valueOf(lastWifiUpload));
+        Log.d(TAG, "lastwifiDownload:" + String.valueOf(lastWifiDown));
+
+        long diffMobileDown = mobileDown - lastMobileDown;
+        if (diffMobileDown < 0) {
+            diffMobileDown = mobileDown;
+        }
+
+        long diffMobileUpload = mobileUpload - lastMobileUpload;
+        if (diffMobileUpload < 0) {
+            diffMobileUpload = mobileUpload;
+        }
+
+        long diffWifiDown = wifiDown - lastWifiDown;
+        if (diffWifiDown < 0) {
+            diffWifiDown = wifiDown;
+        }
+
+        long diffWifiUpload = wifiUpload - lastWifiUpload;
+        if (diffMobileUpload < 0) {
+            diffMobileUpload = wifiUpload;
+        }
+
+        NetworkLibPreference.setMobileTrafficUp(ctx, mobileUpload);
+        NetworkLibPreference.setMobileTrafficDown(ctx, mobileDown);
+        NetworkLibPreference.setWifiTrafficUp(ctx, wifiUpload);
+        NetworkLibPreference.setWifiTrafficDown(ctx, wifiDown);
+
+        return new long[]{diffMobileDown, diffMobileUpload, diffWifiDown, diffWifiUpload};
+    }
+
     private void getCellConnectionStatus() {
         new Thread(() -> {
-            mTelephonyManager = (TelephonyManager) getApplicationContext().getSystemService(Context.TELEPHONY_SERVICE);
             List<CellInfo> allCellInfo;
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
                 CellInfoResultsCallback cellInfoResultsCallback = new CellInfoResultsCallback();
@@ -472,5 +605,55 @@ public class MainActivity extends AppCompatActivity {
     private void log(String key, Object value) {
         Log.i(TAG, key + value);
         mAdapter.addItem(key + "\n" + value);
+    }
+
+    private class CustomPhoneStateListener extends PhoneStateListener {
+        // PhoneStateListener.LISTEN_CELL_LOCATION
+        @Override
+        public void onCellLocationChanged(CellLocation location) {
+            super.onCellLocationChanged(location);
+        }
+
+        // PhoneStateListener.LISTEN_SERVICE_STATE
+        @Override
+        public void onServiceStateChanged(ServiceState serviceState) {
+            super.onServiceStateChanged(serviceState);
+        }
+
+        // PhoneStateListener.LISTEN_SIGNAL_STRENGTHS
+        @Override
+        public void onSignalStrengthsChanged(SignalStrength signalStrength) {
+            super.onSignalStrengthsChanged(signalStrength);
+            int rssi = getRssi(signalStrength);
+            log("rssi :", rssi);
+        }
+    }
+
+    private int getRssi(@NonNull SignalStrength signalStrength) {
+        if (mTelephonyManager.getPhoneType() == TelephonyManager.NETWORK_TYPE_EDGE
+                && getRadioNetworkType() == TelephonyManager.NETWORK_TYPE_CDMA) {
+            return signalStrength.getCdmaDbm();
+        } else {
+            return signalStrength.getEvdoDbm();
+        }
+    }
+
+    private int getRadioNetworkType() {
+        int radioNetworkType = mTelephonyManager.getNetworkType();
+        if (radioNetworkType != TelephonyManager.NETWORK_TYPE_UNKNOWN) {
+            return radioNetworkType;
+        }
+
+        ConnectivityManager connectivityManager = (ConnectivityManager) getSystemService(Context.CONNECTIVITY_SERVICE);
+        if (connectivityManager == null) {
+            return radioNetworkType;
+        }
+
+        NetworkInfo networkInfo = connectivityManager.getActiveNetworkInfo();
+        if (networkInfo == null || !networkInfo.isConnected()) {
+            return radioNetworkType;
+        }
+
+        return ConnectivityManager.TYPE_MOBILE == networkInfo.getType() ? networkInfo.getSubtype() : radioNetworkType;
     }
 }
