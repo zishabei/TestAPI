@@ -18,7 +18,6 @@ import android.app.WallpaperManager;
 import android.app.usage.StorageStatsManager;
 import android.bluetooth.BluetoothAdapter;
 import android.bluetooth.BluetoothDevice;
-import android.content.BroadcastReceiver;
 import android.content.Context;
 import android.content.Intent;
 import android.content.IntentFilter;
@@ -49,7 +48,6 @@ import android.util.Log;
 import android.webkit.WebView;
 
 import java.io.BufferedReader;
-import java.io.File;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.InputStreamReader;
@@ -57,11 +55,8 @@ import java.lang.reflect.Method;
 import java.text.SimpleDateFormat;
 import java.util.ArrayList;
 import java.util.Date;
-import java.util.HashMap;
 import java.util.List;
 import java.util.Locale;
-import java.util.Map;
-import java.util.Scanner;
 import java.util.Set;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
@@ -79,10 +74,7 @@ public class MainActivity extends AppCompatActivity {
 
     private static final String TAG = "GetNewAPI";
     private ShowItemAdapter mAdapter;
-    private MyBatteryBroadcastReciver myBatteryBroadcastReciver;
     private TelephonyManager mTelephonyManager;
-    private CustomPhoneStateListener mListener;
-    private Map<String, Long> mLogResult;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -342,44 +334,36 @@ public class MainActivity extends AppCompatActivity {
     }
 
     private void getBatteryInfo() {
-        IntentFilter filter = new IntentFilter(Intent.ACTION_BATTERY_CHANGED);
-        myBatteryBroadcastReciver = new MyBatteryBroadcastReciver();
-        registerReceiver(myBatteryBroadcastReciver, filter);
-    }
-
-    private class MyBatteryBroadcastReciver extends BroadcastReceiver {
-
-        @Override
-        public void onReceive(Context context, Intent intent) {
-            if (Intent.ACTION_BATTERY_CHANGED.equals(intent.getAction())) {
-                unregisterReceiver(myBatteryBroadcastReciver);
-                boolean batteryPresent = intent.getBooleanExtra(BatteryManager.EXTRA_PRESENT, false);
-                if (batteryPresent) {
-                    log("batteryPresent :", 1);
-                } else {
-                    log("batteryPresent :", 0);
-                }
-                int batteryStatus = intent.getIntExtra(BatteryManager.EXTRA_STATUS, -1);
-                log("batteryStatus :", batteryStatus);
-                int batteryVoltage = intent.getIntExtra(BatteryManager.EXTRA_VOLTAGE, -1);
-                log("batteryVoltage :", batteryVoltage);
-
-                BatteryManager batteryManager = (BatteryManager) getSystemService(BATTERY_SERVICE);
-                int batteryNowCurrent = batteryManager.getIntProperty(BatteryManager.BATTERY_PROPERTY_CURRENT_NOW);
-                int batteryAvgCurrent = batteryManager.getIntProperty(BatteryManager.BATTERY_PROPERTY_CURRENT_AVERAGE);
-                log("batteryNowCurrent :", batteryNowCurrent);
-                log("batteryAvgCurrent :", batteryAvgCurrent);
-
-                String batteryTechnology = intent.getStringExtra(BatteryManager.EXTRA_TECHNOLOGY);
-                log("batteryTechnology :", batteryTechnology);
-                int batteryScale = intent.getIntExtra(BatteryManager.EXTRA_SCALE, -1);
-                log("batteryScale :", batteryScale);
-                int batteryHealth = intent.getIntExtra(BatteryManager.EXTRA_HEALTH, -1);
-                log("batteryHealth :", batteryHealth);
-                int batteryTemperature = intent.getIntExtra(BatteryManager.EXTRA_TEMPERATURE, -1);
-                log("batteryTemperature :", batteryTemperature);
-            }
+        IntentFilter intentFilter = new IntentFilter(Intent.ACTION_BATTERY_CHANGED);
+        Intent intent = registerReceiver(null, intentFilter);
+        if (intent == null) {
+            return;
         }
+        boolean batteryPresent = intent.getBooleanExtra(BatteryManager.EXTRA_PRESENT, false);
+        if (batteryPresent) {
+            log("batteryPresent :", 1);
+        } else {
+            log("batteryPresent :", 0);
+        }
+        int batteryStatus = intent.getIntExtra(BatteryManager.EXTRA_STATUS, -1);
+        log("batteryStatus :", batteryStatus);
+        int batteryVoltage = intent.getIntExtra(BatteryManager.EXTRA_VOLTAGE, -1);
+        log("batteryVoltage :", batteryVoltage);
+
+        BatteryManager batteryManager = (BatteryManager) getSystemService(BATTERY_SERVICE);
+        int batteryNowCurrent = batteryManager.getIntProperty(BatteryManager.BATTERY_PROPERTY_CURRENT_NOW);
+        int batteryAvgCurrent = batteryManager.getIntProperty(BatteryManager.BATTERY_PROPERTY_CURRENT_AVERAGE);
+        log("batteryNowCurrent :", batteryNowCurrent);
+        log("batteryAvgCurrent :", batteryAvgCurrent);
+
+        String batteryTechnology = intent.getStringExtra(BatteryManager.EXTRA_TECHNOLOGY);
+        log("batteryTechnology :", batteryTechnology);
+        int batteryScale = intent.getIntExtra(BatteryManager.EXTRA_SCALE, -1);
+        log("batteryScale :", batteryScale);
+        int batteryHealth = intent.getIntExtra(BatteryManager.EXTRA_HEALTH, -1);
+        log("batteryHealth :", batteryHealth);
+        int batteryTemperature = intent.getIntExtra(BatteryManager.EXTRA_TEMPERATURE, -1);
+        log("batteryTemperature :", batteryTemperature);
     }
 
     /**
@@ -393,7 +377,7 @@ public class MainActivity extends AppCompatActivity {
             listenerEvents |= PhoneStateListener.LISTEN_CELL_LOCATION;
         }
         mTelephonyManager = (TelephonyManager) getApplicationContext().getSystemService(Context.TELEPHONY_SERVICE);
-        mListener = new CustomPhoneStateListener();
+        CustomPhoneStateListener mListener = new CustomPhoneStateListener();
         mTelephonyManager.listen(mListener, listenerEvents);
     }
 
@@ -476,10 +460,10 @@ public class MainActivity extends AppCompatActivity {
             mobileUpBytes = trafficStats[1];
             wifiDownBytes = trafficStats[2];
             wifiUpBytes = trafficStats[3];
-            Log.d(TAG, "mobileDownBytes:" + String.valueOf(trafficStats[0]));
-            Log.d(TAG, "mobileUpBytes:" + String.valueOf(trafficStats[1]));
-            Log.d(TAG, "wifiDownBytes:" + String.valueOf(trafficStats[2]));
-            Log.d(TAG, "wifiUpBytes:" + String.valueOf(trafficStats[3]));
+            Log.d(TAG, "mobileDownBytes:" + trafficStats[0]);
+            Log.d(TAG, "mobileUpBytes:" + trafficStats[1]);
+            Log.d(TAG, "wifiDownBytes:" + trafficStats[2]);
+            Log.d(TAG, "wifiUpBytes:" + trafficStats[3]);
         }
         log("mobileDownBytes :",mobileDownBytes);
         log("mobileUpBytes :",mobileUpBytes);
@@ -508,10 +492,10 @@ public class MainActivity extends AppCompatActivity {
             wifiDown = 0L;
         }
 
-        Log.d(TAG, "srcmobileUpload:" + String.valueOf(mobileUpload));
-        Log.d(TAG, "srcmobileDownload:" + String.valueOf(mobileDown));
-        Log.d(TAG, "srcwifiUpload:" + String.valueOf(wifiUpload));
-        Log.d(TAG, "srcwifiDownload:" + String.valueOf(wifiDown));
+        Log.d(TAG, "srcmobileUpload:" + mobileUpload);
+        Log.d(TAG, "srcmobileDownload:" + mobileDown);
+        Log.d(TAG, "srcwifiUpload:" + wifiUpload);
+        Log.d(TAG, "srcwifiDownload:" + wifiDown);
 
         //Last time
         long lastMobileUpload = NetworkLibPreference.getMobileTrafficUp(ctx);
@@ -519,10 +503,10 @@ public class MainActivity extends AppCompatActivity {
         long lastWifiUpload = NetworkLibPreference.getWifiTrafficUp(ctx);
         long lastWifiDown = NetworkLibPreference.getWifiTrafficDown(ctx);
 
-        Log.d(TAG, "lastmobileUpload:" + String.valueOf(lastMobileUpload));
-        Log.d(TAG, "lastmobileDownload:" + String.valueOf(lastMobileDown));
-        Log.d(TAG, "lastwifiUpload:" + String.valueOf(lastWifiUpload));
-        Log.d(TAG, "lastwifiDownload:" + String.valueOf(lastWifiDown));
+        Log.d(TAG, "lastmobileUpload:" + lastMobileUpload);
+        Log.d(TAG, "lastmobileDownload:" + lastMobileDown);
+        Log.d(TAG, "lastwifiUpload:" + lastWifiUpload);
+        Log.d(TAG, "lastwifiDownload:" + lastWifiDown);
 
         long diffMobileDown = mobileDown - lastMobileDown;
         if (diffMobileDown < 0) {
