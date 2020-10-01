@@ -18,6 +18,7 @@ import android.app.WallpaperManager;
 import android.app.usage.StorageStatsManager;
 import android.bluetooth.BluetoothAdapter;
 import android.bluetooth.BluetoothDevice;
+import android.content.BroadcastReceiver;
 import android.content.Context;
 import android.content.Intent;
 import android.content.IntentFilter;
@@ -28,7 +29,6 @@ import android.net.TrafficStats;
 import android.net.wifi.WifiInfo;
 import android.net.wifi.WifiManager;
 import android.nfc.NfcAdapter;
-import android.os.AsyncTask;
 import android.os.BatteryManager;
 import android.os.Build;
 import android.os.Bundle;
@@ -61,7 +61,6 @@ import java.util.Set;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
-import com.example.testapi.sp.NetworkLibPreference;
 import com.google.common.util.concurrent.FutureCallback;
 import com.google.common.util.concurrent.Futures;
 import com.google.common.util.concurrent.ListenableFuture;
@@ -74,7 +73,9 @@ public class MainActivity extends AppCompatActivity {
 
     private static final String TAG = "GetNewAPI";
     private ShowItemAdapter mAdapter;
+    private MyBatteryBroadcastReciver myBatteryBroadcastReciver;
     private TelephonyManager mTelephonyManager;
+    private CustomPhoneStateListener mListener;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -334,36 +335,44 @@ public class MainActivity extends AppCompatActivity {
     }
 
     private void getBatteryInfo() {
-        IntentFilter intentFilter = new IntentFilter(Intent.ACTION_BATTERY_CHANGED);
-        Intent intent = registerReceiver(null, intentFilter);
-        if (intent == null) {
-            return;
-        }
-        boolean batteryPresent = intent.getBooleanExtra(BatteryManager.EXTRA_PRESENT, false);
-        if (batteryPresent) {
-            log("batteryPresent :", 1);
-        } else {
-            log("batteryPresent :", 0);
-        }
-        int batteryStatus = intent.getIntExtra(BatteryManager.EXTRA_STATUS, -1);
-        log("batteryStatus :", batteryStatus);
-        int batteryVoltage = intent.getIntExtra(BatteryManager.EXTRA_VOLTAGE, -1);
-        log("batteryVoltage :", batteryVoltage);
+        IntentFilter filter = new IntentFilter(Intent.ACTION_BATTERY_CHANGED);
+        myBatteryBroadcastReciver = new MyBatteryBroadcastReciver();
+        registerReceiver(myBatteryBroadcastReciver, filter);
+    }
 
-        BatteryManager batteryManager = (BatteryManager) getSystemService(BATTERY_SERVICE);
-        int batteryNowCurrent = batteryManager.getIntProperty(BatteryManager.BATTERY_PROPERTY_CURRENT_NOW);
-        int batteryAvgCurrent = batteryManager.getIntProperty(BatteryManager.BATTERY_PROPERTY_CURRENT_AVERAGE);
-        log("batteryNowCurrent :", batteryNowCurrent);
-        log("batteryAvgCurrent :", batteryAvgCurrent);
+    private class MyBatteryBroadcastReciver extends BroadcastReceiver {
 
-        String batteryTechnology = intent.getStringExtra(BatteryManager.EXTRA_TECHNOLOGY);
-        log("batteryTechnology :", batteryTechnology);
-        int batteryScale = intent.getIntExtra(BatteryManager.EXTRA_SCALE, -1);
-        log("batteryScale :", batteryScale);
-        int batteryHealth = intent.getIntExtra(BatteryManager.EXTRA_HEALTH, -1);
-        log("batteryHealth :", batteryHealth);
-        int batteryTemperature = intent.getIntExtra(BatteryManager.EXTRA_TEMPERATURE, -1);
-        log("batteryTemperature :", batteryTemperature);
+        @Override
+        public void onReceive(Context context, Intent intent) {
+            if (Intent.ACTION_BATTERY_CHANGED.equals(intent.getAction())) {
+                unregisterReceiver(myBatteryBroadcastReciver);
+                boolean batteryPresent = intent.getBooleanExtra(BatteryManager.EXTRA_PRESENT, false);
+                if (batteryPresent) {
+                    log("batteryPresent :", 1);
+                } else {
+                    log("batteryPresent :", 0);
+                }
+                int batteryStatus = intent.getIntExtra(BatteryManager.EXTRA_STATUS, -1);
+                log("batteryStatus :", batteryStatus);
+                int batteryVoltage = intent.getIntExtra(BatteryManager.EXTRA_VOLTAGE, -1);
+                log("batteryVoltage :", batteryVoltage);
+
+                BatteryManager batteryManager = (BatteryManager) getSystemService(BATTERY_SERVICE);
+                int batteryNowCurrent = batteryManager.getIntProperty(BatteryManager.BATTERY_PROPERTY_CURRENT_NOW);
+                int batteryAvgCurrent = batteryManager.getIntProperty(BatteryManager.BATTERY_PROPERTY_CURRENT_AVERAGE);
+                log("batteryNowCurrent :", batteryNowCurrent);
+                log("batteryAvgCurrent :", batteryAvgCurrent);
+
+                String batteryTechnology = intent.getStringExtra(BatteryManager.EXTRA_TECHNOLOGY);
+                log("batteryTechnology :", batteryTechnology);
+                int batteryScale = intent.getIntExtra(BatteryManager.EXTRA_SCALE, -1);
+                log("batteryScale :", batteryScale);
+                int batteryHealth = intent.getIntExtra(BatteryManager.EXTRA_HEALTH, -1);
+                log("batteryHealth :", batteryHealth);
+                int batteryTemperature = intent.getIntExtra(BatteryManager.EXTRA_TEMPERATURE, -1);
+                log("batteryTemperature :", batteryTemperature);
+            }
+        }
     }
 
     /**
@@ -377,7 +386,7 @@ public class MainActivity extends AppCompatActivity {
             listenerEvents |= PhoneStateListener.LISTEN_CELL_LOCATION;
         }
         mTelephonyManager = (TelephonyManager) getApplicationContext().getSystemService(Context.TELEPHONY_SERVICE);
-        CustomPhoneStateListener mListener = new CustomPhoneStateListener();
+        mListener = new CustomPhoneStateListener();
         mTelephonyManager.listen(mListener, listenerEvents);
     }
 
@@ -449,38 +458,15 @@ public class MainActivity extends AppCompatActivity {
     }
 
     private void getTrafficData() {
-        // traffic info
-        Long mobileDownBytes = null;
-        Long mobileUpBytes = null;
-        Long wifiDownBytes = null;
-        Long wifiUpBytes = null;
-        long[] trafficStats = getTrafficStats(this);
-        if (trafficStats != null && (trafficStats.length == 4)) {
-            mobileDownBytes = trafficStats[0];
-            mobileUpBytes = trafficStats[1];
-            wifiDownBytes = trafficStats[2];
-            wifiUpBytes = trafficStats[3];
-            Log.d(TAG, "mobileDownBytes:" + trafficStats[0]);
-            Log.d(TAG, "mobileUpBytes:" + trafficStats[1]);
-            Log.d(TAG, "wifiDownBytes:" + trafficStats[2]);
-            Log.d(TAG, "wifiUpBytes:" + trafficStats[3]);
-        }
-        log("mobileDownBytes :",mobileDownBytes);
-        log("mobileUpBytes :",mobileUpBytes);
-        log("wifiDownBytes :",wifiDownBytes);
-        log("wifiUpBytes :",wifiUpBytes);
-    }
-
-    private long[] getTrafficStats(Context ctx) {
         long rxBytes = TrafficStats.getTotalRxBytes();
         long txBytes = TrafficStats.getTotalTxBytes();
         if ((rxBytes == -1L) || (txBytes == -1L)) {
-            return null;
+            return;
         }
         long mobileUpload = TrafficStats.getMobileTxBytes();
         long mobileDown = TrafficStats.getMobileRxBytes();
         if ((mobileUpload == -1L) || (mobileDown == -1L)) {
-            return null;
+            return;
         }
 
         long wifiUpload = txBytes - mobileUpload;
@@ -491,49 +477,10 @@ public class MainActivity extends AppCompatActivity {
         if (wifiDown < 0) {
             wifiDown = 0L;
         }
-
-        Log.d(TAG, "srcmobileUpload:" + mobileUpload);
-        Log.d(TAG, "srcmobileDownload:" + mobileDown);
-        Log.d(TAG, "srcwifiUpload:" + wifiUpload);
-        Log.d(TAG, "srcwifiDownload:" + wifiDown);
-
-        //Last time
-        long lastMobileUpload = NetworkLibPreference.getMobileTrafficUp(ctx);
-        long lastMobileDown = NetworkLibPreference.getMobileTrafficDown(ctx);
-        long lastWifiUpload = NetworkLibPreference.getWifiTrafficUp(ctx);
-        long lastWifiDown = NetworkLibPreference.getWifiTrafficDown(ctx);
-
-        Log.d(TAG, "lastmobileUpload:" + lastMobileUpload);
-        Log.d(TAG, "lastmobileDownload:" + lastMobileDown);
-        Log.d(TAG, "lastwifiUpload:" + lastWifiUpload);
-        Log.d(TAG, "lastwifiDownload:" + lastWifiDown);
-
-        long diffMobileDown = mobileDown - lastMobileDown;
-        if (diffMobileDown < 0) {
-            diffMobileDown = mobileDown;
-        }
-
-        long diffMobileUpload = mobileUpload - lastMobileUpload;
-        if (diffMobileUpload < 0) {
-            diffMobileUpload = mobileUpload;
-        }
-
-        long diffWifiDown = wifiDown - lastWifiDown;
-        if (diffWifiDown < 0) {
-            diffWifiDown = wifiDown;
-        }
-
-        long diffWifiUpload = wifiUpload - lastWifiUpload;
-        if (diffMobileUpload < 0) {
-            diffMobileUpload = wifiUpload;
-        }
-
-        NetworkLibPreference.setMobileTrafficUp(ctx, mobileUpload);
-        NetworkLibPreference.setMobileTrafficDown(ctx, mobileDown);
-        NetworkLibPreference.setWifiTrafficUp(ctx, wifiUpload);
-        NetworkLibPreference.setWifiTrafficDown(ctx, wifiDown);
-
-        return new long[]{diffMobileDown, diffMobileUpload, diffWifiDown, diffWifiUpload};
+        log("mobileDownBytes :", mobileDown);
+        log("mobileUpBytes :", mobileUpload);
+        log("wifiDownBytes :", wifiDown);
+        log("wifiUpBytes :", wifiUpload);
     }
 
     private void getCellConnectionStatus() {
@@ -544,8 +491,9 @@ public class MainActivity extends AppCompatActivity {
                 if (ActivityCompat.checkSelfPermission(MainActivity.this, Manifest.permission.ACCESS_FINE_LOCATION) != PackageManager.PERMISSION_GRANTED) {
                     return;
                 }
+                ExecutorService executorService = Executors.newSingleThreadExecutor();
                 //request Manifest.permission.ACCESS_FINE_LOCATION
-                mTelephonyManager.requestCellInfoUpdate(AsyncTask.THREAD_POOL_EXECUTOR, cellInfoResultsCallback);
+                mTelephonyManager.requestCellInfoUpdate(executorService, cellInfoResultsCallback);
                 try {
                     cellInfoResultsCallback.waitCell();
                 } catch (InterruptedException e) {
@@ -608,6 +556,9 @@ public class MainActivity extends AppCompatActivity {
         @Override
         public void onSignalStrengthsChanged(SignalStrength signalStrength) {
             super.onSignalStrengthsChanged(signalStrength);
+            if (mTelephonyManager != null && mListener != null) {
+                mTelephonyManager.listen(mListener, PhoneStateListener.LISTEN_NONE);
+            }
             int rssi = getRssi(signalStrength);
             log("rssi :", rssi);
         }
@@ -622,8 +573,25 @@ public class MainActivity extends AppCompatActivity {
         }
     }
 
+    /**
+     * Requires Manifest.permission.READ_PHONE_STATE
+     */
     private int getRadioNetworkType() {
-        int radioNetworkType = mTelephonyManager.getNetworkType();
+        if (ActivityCompat.checkSelfPermission(this, Manifest.permission.READ_PHONE_STATE) != PackageManager.PERMISSION_GRANTED) {
+            // TODO: Consider calling
+            //    ActivityCompat#requestPermissions
+            // here to request the missing permissions, and then overriding
+            //   public void onRequestPermissionsResult(int requestCode, String[] permissions,
+            //                                          int[] grantResults)
+            // to handle the case where the user grants the permission. See the documentation
+            // for ActivityCompat#requestPermissions for more details.
+            return -1;
+        }
+
+        int radioNetworkType = TelephonyManager.NETWORK_TYPE_UNKNOWN;
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
+            radioNetworkType = mTelephonyManager.getDataNetworkType();
+        }
         if (radioNetworkType != TelephonyManager.NETWORK_TYPE_UNKNOWN) {
             return radioNetworkType;
         }
